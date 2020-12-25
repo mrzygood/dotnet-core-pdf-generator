@@ -1,0 +1,33 @@
+FROM node AS buildnode
+WORKDIR dist/
+COPY Tokenizer.WebUI/ClientApp/package.json .
+COPY Tokenizer.WebUI/ClientApp/package-lock.json .
+RUN npm install
+RUN npm -v
+RUN node -v
+RUN npm install -g @angular/cli@8.3.26
+COPY Tokenizer.Web/ClientApp/ . 
+
+RUN ng version
+RUN node --max_old_space_size=8192 node_modules/@angular/cli/bin/ng build --prod
+
+FROM mcr.microsoft.com/dotnet/core/sdk:3.1 AS buildnet
+ENV InDocker=true
+WORKDIR ui/
+COPY PdfGenerator.Web ./PdfGenerator.Web
+
+RUN dotnet restore PdfGenerator.Web/PdfGenerator.Web.csproj
+RUN dotnet publish PdfGenerator.Web/PdfGenerator.Web.csproj -o ./../../web
+
+FROM mcr.microsoft.com/dotnet/core/aspnet:3.1
+RUN apt-get update -qq && apt-get -y install libgdiplus libc6-dev
+EXPOSE 8080
+WORKDIR /
+COPY --from=buildnet /web .
+COPY --from=buildnode /dist ./ClientApp/
+RUN chmod 755 /Tools/Linux/wkhtmltopdf
+ENTRYPOINT ["dotnet", "PdfGenerator.Web.dll"]
+
+
+
+
